@@ -29,7 +29,6 @@ resource "aws_default_subnet" "default_az2" {
 
 resource "aws_elb" "prod_web" {
   name            = "prod-web-lb"
-  instances       = aws_instance.prod_web.*.id
   subnets         = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
   security_groups = [aws_security_group.prod_web.id]
 
@@ -74,28 +73,26 @@ resource "aws_security_group" "prod_web" {
   }
 }
 
-resource "aws_instance" "prod_web" {
-  count = 2
-
-  ami           = "ami-0cebd9367bd2ef59f"
+resource "aws_launch_template" "prod_web" {
+  name_prefix   = "prod-web"
+  image_id      = "ami-0cebd9367bd2ef59f"
   instance_type = "t2.nano"
+}
 
-  vpc_security_group_ids = [
-    aws_security_group.prod_web.id
-  ]
+resource "aws_autoscaling_group" "prod_web" {
+  availability_zones  = ["us-east-2a", "us-east-2b"]
+  vpc_zone_identifier = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
+  desired_capacity    = 2
+  max_size            = 2
+  min_size            = 2
 
-  tags = {
-    "Terraform" = true
+  launch_template {
+    id      = aws_launch_template.prod_web.id
+    version = "$Latest"
   }
 }
 
-resource "aws_eip_association" "prod_web" {
-  instance_id   = aws_instance.prod_web.0.id
-  allocation_id = aws_eip.prod_web.id
-}
-
-resource "aws_eip" "prod_web" {
-   tags = {
-    "Terraform" = true
-  }
+resource "aws_autoscaling_attachment" "prod_web" {
+  autoscaling_group_name = aws_autoscaling_group.prod_web.id
+  elb                    = aws_elb.prod_web.id
 }
