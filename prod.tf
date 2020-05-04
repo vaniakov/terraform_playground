@@ -1,35 +1,3 @@
-variable "region" {
-  default = "us-east-2"
-  type = string
-}
-variable "bucket_name" {
-  default = "tf-course-2020-05-04-ikova"
-  type = string
-}
-variable "web_image_id" {
-  default = "ami-0cebd9367bd2ef59f"
-  type = string
-}
-variable "web_instance_type" {
-  default = "t2.nano"
-  type = string
-}
-
-variable "whitelist" {
-  type = list(string)
-  default = ["0.0.0.0/0"]
-}
-
-variable "web_max_size" {
-  type = number
-  default = 1
-}
-
-variable "web_min_size" {
-  type = number
-  default = 1
-}
-
 provider "aws" {
   profile = "terraform"
   region = var.region
@@ -59,26 +27,8 @@ resource "aws_default_subnet" "default_az2" {
   }
 }
 
-resource "aws_elb" "prod_web" {
-  name            = "prod-web-lb"
-  subnets         = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
-  security_groups = [aws_security_group.prod_web.id]
-
-  listener {
-    instance_port     = 80
-    instance_protocol = "tcp"
-    lb_port           = 80
-    lb_protocol       = "tcp"
-
-  }
-
-  tags = {
-    "Terraform" = true
-  }
-}
-
-resource "aws_security_group" "prod_web" {
-  name        = "prod_web"
+resource "aws_security_group" "web" {
+  name        = "web"
   description = "Allow http and https inbound and everything outbound."
 
   ingress {
@@ -105,26 +55,15 @@ resource "aws_security_group" "prod_web" {
   }
 }
 
-resource "aws_launch_template" "prod_web" {
-  name_prefix   = "prod-web"
-  image_id      = var.web_image_id
-  instance_type = var.web_instance_type
-}
 
-resource "aws_autoscaling_group" "prod_web" {
-  availability_zones  = ["us-east-2a", "us-east-2b"]
-  vpc_zone_identifier = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
-  desired_capacity    = 1
-  max_size            = var.web_max_size
-  min_size            = var.web_min_size
+module "web_app" {
+  source            = "./modules/web_app"
 
-  launch_template {
-    id      = aws_launch_template.prod_web.id
-    version = "$Latest"
-  }
-}
-
-resource "aws_autoscaling_attachment" "prod_web" {
-  autoscaling_group_name = aws_autoscaling_group.prod_web.id
-  elb                    = aws_elb.prod_web.id
+  web_image_id      = var.web_image_id
+  web_instance_type = var.web_instance_type
+  web_max_size      = var.web_max_size
+  web_min_size      = var.web_min_size
+  subnets           = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
+  security_groups   = [aws_security_group.web.id]
+  web_app           = "prod"
 }
