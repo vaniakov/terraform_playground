@@ -3,7 +3,7 @@ provider "aws" {
   region = var.region
 }
 
-resource "aws_s3_bucket" "prod_tf_course" {
+resource "aws_s3_bucket" "prod_tf" {
   bucket        = var.bucket_name
   acl           = "private"
   force_destroy = true
