@@ -1,0 +1,284 @@
+## https://github.com/hashicorp/terraform-guides/tree/master/governance/second-generation/aws
+
+# This policy restricts accounts that can be assumed by the AWS provider
+# It includes a map that maps roles to lists of regex expressions
+# that match one or more workspace names
+# It assumes that the role_arn is either a hard-coded value or a reference
+# to a Terraform variable
+# To test a particular workspace the tfrun mock workspace name will need to be changed
+# Additionally the tfplan mock will need altered as well in the variables section at the bottom for _role_arn and _creator
+
+#### Imports #####
+import "tfconfig"
+import "tfplan"
+import "tfrun"
+import "strings"
+
+##### Functions #####
+
+# Find all providers aliases of given type using the tfconfig import
+find_provider_aliases = func(type) {
+
+  # We will find all provider aliases og given type from tfconfig,
+  # meaning providers.TYPE.alias.ALIAS
+  providers = {}
+
+  # Iterate over all modules in the tfconfig import
+  for tfconfig.module_paths as path {
+    # Iterate providers to check for null values
+    if tfconfig.module(path).providers[type] else null is not null {
+      # Iterate over providers of given type in module
+      aliases = tfconfig.module(path).providers[type]["alias"] else {}
+      for aliases as alias, data {
+        # Change default alias ("") to "default"
+        if alias is "" {
+          alias = "default"
+        }
+
+        # Get the address of the provider alias
+        if length(path) == 0 {
+          # root module
+          address = type + "." + alias
+        } else {
+          # non-root module
+          address = "module." + strings.join(path, ".module.") + "." +
+            type +
+            "." +
+            alias
+        }
+
+        providers[address] = data
+
+      } // end aliases loop
+    } // end check for null loop
+  } // end module_paths loop
+
+  return providers
+}
+
+# Determine role_arn of a provider from its data
+determine_role_arn = func(data) {
+
+  # Return empty string if provider does not assume a role
+  role_arn_value = ""
+
+  # Check for role_arn in config
+  if (length(data["config"]) else 0) > 0 and
+    (length(data["config"]["assume_role"]) else 0) > 0 {
+    config_assume_role = data["config"]["assume_role"]
+    if config_assume_role[0]["role_arn"] else null is not null {
+      role_arn = config_assume_role[0]["role_arn"]
+      # role_arn of AWS provider was hard-coded role_arn
+      role_arn_value = role_arn
+    } // end role_arn in config test
+  } // end config test
+
+  # Check for role_arn in references
+  if (length(data["references"]) else 0) > 0 and
+    (length(data["references"]["assume_role"]) else 0) > 0 {
+    references_assume_role = data["references"]["assume_role"]
+    if references_assume_role[0]["role_arn"] else null is not null and
+      length(references_assume_role[0]["role_arn"]) > 0 {
+      role_arn = references_assume_role[0]["role_arn"][0]
+      if role_arn matches "var\\.(.*)" {
+        # role_arn of AWS provider was a Terraform 0.12 style variable
+        role_arn_variable = strings.trim_prefix(role_arn, "var.")
+        role_arn_value = tfplan.variables[role_arn_variable]
+      } // end determination of role_arn type
+    } // end role_arn in references test
+  } // end references test
+
+  return role_arn_value
+}
+
+# Get assumed roles from all AWS providers
+get_assumed_roles = func() {
+
+  # Initialize empty map of roles indexed by aliases
+  assumed_roles = {}
+
+  # Get all AWS provider aliases
+  aws_providers = find_provider_aliases("aws")
+
+  # Iterate through all AWS provider aliases
+  for aws_providers as alias, data {
+    assumed_roles[alias] = determine_role_arn(data)
+  } // end aws_providers
+
+  return assumed_roles
+
+}
+
+# Validate that all assumed roles are allowed
+validate_assumed_roles = func(allowed_roles_map) {
+
+  validated = true
+
+  assumed_roles = get_assumed_roles()
+
+  # Iterate over all assumed roles used by providers
+  for assumed_roles as alias, role {
+    # Validate that each assumed role is in map
+    if role is not "" {
+      if role not in keys(allowed_roles_map) {
+        print("AWS provider with alias", alias, "has assumed role",
+          role, "that is not allowed.")
+        validated = false
+      } else {
+
+        # Get workspace name
+        workspace_name = tfrun.workspace.name
+
+        # Validate that role is allowed for current workspace
+        matched = false
+        for allowed_roles_map[role] as workspace_regex {
+          if workspace_name matches workspace_regex {
+            matched = true
+          }
+        } // end for workspace_regex
+        if not matched {
+          print("Workspace", workspace_name, "is not allowed to use role", role)
+          print("It used that role in the AWS provider with alias", alias)
+          validated = false
+        } // end matched check
+      } // end else role in allowed_roles_map
+    } // end if role is not ""
+  } // end assumed_roles loop
+  return validated
+}
+
+###### Allowed Roles #####
+allowed_roles_map = {
+  ######### SANDBOX
+  "arn:aws:iam::621013694378:role/au-tf": [
+    "w-sandbox1-testapp-dev",
+    "w-sandbox1-testapp-prod",
+    "sentinel-testing-dev",
+    "sentinel-testing-prod",
+  ],
+  ######### ENT-TOOLS
+  "arn:aws:iam::419922593135:role/au-tf": [
+    "w-ent-tools-fuse-dev",
+    "w-ent-tools-mq-dev",
+    "w-ent-tools-gitlab-dev",
+  ],
+  "arn:aws:iam::494789397095:role/au-tf":[
+    "w-ent-tools-fuse-stage",
+    "w-ent-tools-gitlab-stage",
+    "w-ent-tools-mq-stage",
+  ],
+  "arn:aws:iam::419721670600:role/au-tf":[
+    "w-ent-tools-fuse-qa",
+    "w-ent-tools-gitlab-qa",
+    "w-ent-tools-mq-qa",
+  ],
+  "arn:aws:iam::468484380316:role/au-tf": [
+    "w-ent-tools-gitlab-prod",
+    "w-ent-tools-fuse-prod",
+    "w-ent-tools-mq-prod",
+  ],
+  ######### SHAREDTOOLS
+  "arn:aws:iam::269027967069:role/au-tf": [
+    "w-sharedtools-chef-dev",
+    "w-sharedtools-scalr-dev",
+    "w-sharedtools-scalr-iacp-dev",
+    "w-sharedtools-swimlane-dev",
+    "w-sharedtools-cumulus-dev",
+  ],
+  "arn:aws:iam::763717810842:role/au-tf": [
+    "w-sharedtools-chef-prod",
+    "w-sharedtools-scalr-prod",
+    "w-sharedtools-scalr-iacp-prod",
+    "w-sharedtools-swimlane-prod",
+    "w-sharedtools-cumulus-prod",
+  ],
+  ######### CHAP
+  "arn:aws:iam::618257783690:role/au-tf": [
+    "w-chap-eservices-dev",
+    "w-chap-rmd-dev",
+    "w-chap-rmd-dms-dev",
+    "w-chap-to-dev",
+    "w-chap-to-dms-dev",
+    "w-chap-mry-dev",
+    "w-chap-mry-dms-dev",
+  ],
+  "arn:aws:iam::908472651823:role/au-tf": [
+    "w-chap-eservices-qa",
+    "w-chap-mry-dms-qa",
+    "w-chap-mry-qa",
+    "w-chap-rmd-dms-qa",
+    "w-chap-rmd-qa",
+    "w-chap-to-dms-qa",
+    "w-chap-to-qa",
+  ],
+  "arn:aws:iam::038905494005:role/au-tf": [
+    "w-chap-eservices-stage",
+    "w-chap-mry-dms-stage",
+    "w-chap-mry-stage",
+    "w-chap-to-dms-stage",
+    "w-chap-to-stage",
+  ],
+  "arn:aws:iam::123865573227:role/au-tf": [
+    "w-chap-eservices-prod",
+    "w-chap-mry-dms-stage",
+    "w-chap-mry-prod",
+    "w-chap-rmd-dms-prod",
+    "w-chap-rmd-prod",
+    "w-chap-to-dms-stage",
+    "w-chap-to-prod",
+  ],
+  ########## SCC
+  "arn:aws:iam::026895110227:role/au-tf": [
+    "w-scc-scc-dev",
+  ],
+  "arn:aws:iam::000023630191:role/au-tf": [
+    "w-scc-scc-prod",
+  ],
+  "arn:aws:iam::830547119235:role/au-tf": [
+    "w-scc-scc-qa",
+  ],
+  "arn:aws:iam::051510061670:role/au-tf": [
+    "w-scc-scc-stage",
+  ],
+  ########### OPSVISION
+  "arn:aws:iam::178365899371:role/au-tf": [
+    "w-opsvision-bf-dev",
+    "w-opsvision-core-dev",
+    "w-opsvision-mes-dev",
+    "w-opsvision-other-dev",
+    "w-opsvision-serverless-dev",
+    "w-opsvision-opsvision-dev",
+  ],
+  "arn:aws:iam::385345895164:role/au-tf": [
+    "w-opsvision-bf-stage",
+    "w-opsvision-core-stage",
+    "w-opsvision-mes-stage",
+    "w-opsvision-other-stage",
+    "w-opsvision-serverless-stage",
+  ],
+  "arn:aws:iam::447497094091:role/au-tf": [
+    "w-opsvision-bf-prod",
+    "w-opsvision-core-prod",
+    "w-opsvision-mes-prod",
+    "w-opsvision-other-prod",
+    "w-opsvision-serverless-prod",
+  ],
+  ########## w-network-iot-xxx
+  "arn:aws:iam::455518072271:role/au-tf": [
+    "w-network-iot-comms-dev",
+  ],
+  "arn:aws:iam::132754487797:role/au-tf": [
+    "w-network-iot-comms-prod",
+  ],
+
+}
+
+##### Rules #####
+
+# Call the validation function
+roles_validated = validate_assumed_roles(allowed_roles_map)
+
+# Main rule
+main = rule {
+  roles_validated
+}
