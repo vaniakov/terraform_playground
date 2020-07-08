@@ -1,3 +1,9 @@
+# Additional provider configuration for west coast region
+provider "aws" {
+  alias  = "west1"
+  region = "us-west-1"
+}
+
 resource "aws_elb" "this" {
   name            = "${var.web_app}-web-lb"
   subnets         = var.subnets

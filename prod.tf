@@ -1,7 +1,37 @@
 provider "aws" {
   profile = "terraform"
-  region = var.region
+  region = "us-east-1"
 }
+
+provider "aws" {
+  profile = "terraform"
+  region = "us-west-1"
+  alias = "west"
+
+  # The security credentials for AWS Account A.
+  access_key = var.access_key
+  secret_key = var.secret_key
+  assume_role {
+    # The role ARN within Account B to AssumeRole into. Created in step 1.
+    role_arn    = "arn:aws:iam::413375762067:role/ec2_admin"
+  }
+}
+
+provider "aws" {
+  profile = "terraform"
+  region = "us-west-2"
+  alias = "west2"
+
+  # The security credentials for AWS Account A.
+  access_key = var.access_key
+  secret_key = var.secret_key
+
+  assume_role {
+    # The role ARN within Account B to AssumeRole into. Created in step 1.
+    role_arn    = var.arn
+  }
+}
+
 
 resource "aws_s3_bucket" "prod_tf_course" {
   bucket        = var.bucket_name

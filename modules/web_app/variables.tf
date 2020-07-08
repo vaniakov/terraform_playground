@@ -23,3 +23,8 @@ variable "security_groups" {
 variable "web_app" {
   type = string
 }
+
+variable "arn" {
+  type = string
+  default = "arn-test"
+}

@@ -23,3 +23,6 @@ variable "web_min_size" {
   type = number
 }
 
+variable "arn" {
+  type = string
+}
