@@ -9,5 +9,5 @@ resource "aws_s3_bucket" "tf_course" {
   tags = {
     owner = "i.kovalkovskyi@scalr.com"
   }
-}
+{
 }
