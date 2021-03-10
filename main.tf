@@ -46,6 +46,10 @@ resource "aws_instance" "instance" {
 resource "aws_key_pair" "ssh-key" {
   key_name   = var.key_name
   public_key = var.public_key
+
+  tags = {
+    owner = "vaniakov95@gmail.com"
+  }
 }
 
 output "public_ip" {
