@@ -6,8 +6,8 @@ provider "aws" {
 # centos8 = ami-01ca03df4a6012157
 
 variable "aws_ami" {
-  type    = string
-  default = "ami-06cf02a98a61f9f5e"
+  type        = string
+  default     = "ami-06cf02a98a61f9f5e"
   description = "The id of the machine image (AMI) to use for the server."
 
   validation {
@@ -32,20 +32,21 @@ variable "key_name" {
   default = "scalr-iacp-key"
 }
 
-resource "aws_instance" "instance" {
-  ami                         = var.aws_ami
-  instance_type               = "t1.micro"
-  associate_public_ip_address = true
-  key_name                    = var.key_name
+resource "aws_key_pair" "ssh-key" {
+  key_name   = var.key_name
+  public_key = var.public_key
 
   tags = {
     owner = "vaniakov95@gmail.com"
   }
 }
 
-resource "aws_key_pair" "ssh-key" {
-  key_name   = var.key_name
-  public_key = var.public_key
+
+resource "aws_instance" "instance" {
+  ami                         = var.aws_ami
+  instance_type               = "t1.micro"
+  associate_public_ip_address = true
+  key_name                    = var.key_name
 
   tags = {
     owner = "vaniakov95@gmail.com"
