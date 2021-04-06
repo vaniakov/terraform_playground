@@ -39,7 +39,7 @@ resource "aws_instance" "instance" {
   key_name                    = aws_key_pair.ssh-key.key_name
 
   tags = {
-    owner = "vaniakov95@gmail.com"
+    owner = "i.kovalkovskyi"
   }
 }
 
@@ -48,7 +48,7 @@ resource "aws_key_pair" "ssh-key" {
   public_key = var.public_key
 
   tags = {
-    owner = "vaniakov95@gmail.com"
+    owner = "i.kovalkovskyi"
   }
 }
 
