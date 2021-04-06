@@ -36,7 +36,7 @@ resource "aws_instance" "instance" {
   ami                         = var.aws_ami
   instance_type               = "t1.micro"
   associate_public_ip_address = true
-  key_name                    = var.key_name
+  key_name                    = aws_key_pair.ssh-key.key_name
 
   tags = {
     owner = "vaniakov95@gmail.com"
