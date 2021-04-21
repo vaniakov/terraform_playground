@@ -23,6 +23,6 @@ resource "aws_instance" "web" {
   instance_type = "t1.micro"
 
   tags = {
-    owner = "vaniakov95@gmail.com"
+    owner = "i.kovalkovskyi"
   }
 }
